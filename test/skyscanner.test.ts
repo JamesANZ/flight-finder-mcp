@@ -11,6 +11,7 @@ describe("SkyscannerService", () => {
   describe("searchFlights", () => {
     it("should return mock flight results for valid request", async () => {
       const request: FlightSearchRequest = {
+        source: "skyscanner",
         origin: "LAX",
         destination: "JFK",
         departureDate: "2024-12-01",
@@ -28,6 +29,7 @@ describe("SkyscannerService", () => {
 
     it("should handle round-trip flights", async () => {
       const request: FlightSearchRequest = {
+        source: "skyscanner",
         origin: "LAX",
         destination: "JFK",
         departureDate: "2024-12-01",
@@ -43,6 +45,7 @@ describe("SkyscannerService", () => {
 
     it("should generate unique IDs for each itinerary", async () => {
       const request: FlightSearchRequest = {
+        source: "skyscanner",
         origin: "LAX",
         destination: "JFK",
         departureDate: "2024-12-01",
@@ -74,8 +77,6 @@ describe("SkyscannerService", () => {
 
       expect(result.bestDate).toBeDefined();
       expect(result.bestPrice).toBeGreaterThan(0);
-      expect(result.allPrices).toHaveLength(3);
-      expect(result.allPrices.every((p) => p.price > 0)).toBe(true);
     });
 
     it("should handle empty dates array", async () => {

@@ -58,13 +58,12 @@ describe("FlightAnalyzerService", () => {
     it("should provide insights for short flights", () => {
       const itinerary: FlightItinerary = {
         id: "test",
-        price: { amount: 150, currency: "USD", formatted: "$150" },
+        price: { amount: 150, currency: "USD" },
         segments: [],
         totalDuration: "1h 30m",
         stops: 0,
         bookingLink: "https://example.com",
         source: "skyscanner",
-        searchDate: "2024-12-01",
       };
 
       const insights = service.analyzeFlightDetails(itinerary);
@@ -79,13 +78,12 @@ describe("FlightAnalyzerService", () => {
     it("should provide insights for long flights", () => {
       const itinerary: FlightItinerary = {
         id: "test",
-        price: { amount: 850, currency: "USD", formatted: "$850" },
+        price: { amount: 850, currency: "USD" },
         segments: [],
         totalDuration: "10h 0m",
         stops: 1,
         bookingLink: "https://example.com",
         source: "skyscanner",
-        searchDate: "2024-12-01",
       };
 
       const insights = service.analyzeFlightDetails(itinerary);
@@ -104,13 +102,12 @@ describe("FlightAnalyzerService", () => {
     it("should provide insights for multi-stop flights", () => {
       const itinerary: FlightItinerary = {
         id: "test",
-        price: { amount: 400, currency: "USD", formatted: "$400" },
+        price: { amount: 400, currency: "USD" },
         segments: [],
         totalDuration: "6h 0m",
         stops: 2,
         bookingLink: "https://example.com",
         source: "skyscanner",
-        searchDate: "2024-12-01",
       };
 
       const insights = service.analyzeFlightDetails(itinerary);

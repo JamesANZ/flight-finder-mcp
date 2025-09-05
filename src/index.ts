@@ -8,6 +8,10 @@ import {
 import { SkyscannerService } from "./services/skyscanner.js";
 import { GoogleFlightsService } from "./services/google-flights.js";
 import { FlightAnalyzerService } from "./services/flight-analyzer.js";
+import { FlightSearchHelper } from "./helpers/flight-search-helper.js";
+import { FlightFormatter } from "./helpers/flight-formatter.js";
+import { RecommendationHelper } from "./helpers/recommendation-helper.js";
+import { DateHelper } from "./helpers/date-helper.js";
 import {
   FlightSearchRequest,
   FlightSearchResponse,
@@ -20,16 +24,26 @@ import {
  * This server provides tools for searching flights across multiple sources,
  * analyzing prices across different dates, and providing booking recommendations.
  */
-class FlightFinderMCPServer {
+export class FlightFinderMCPServer {
   private server: Server;
   private skyscannerService: SkyscannerService;
   private googleFlightsService: GoogleFlightsService;
   private analyzerService: FlightAnalyzerService;
+  private flightSearchHelper: FlightSearchHelper;
+  private flightFormatter: FlightFormatter;
+  private recommendationHelper: RecommendationHelper;
 
   constructor() {
     this.skyscannerService = new SkyscannerService();
     this.googleFlightsService = new GoogleFlightsService();
     this.analyzerService = new FlightAnalyzerService();
+
+    this.flightSearchHelper = new FlightSearchHelper(
+      this.skyscannerService,
+      this.googleFlightsService,
+    );
+    this.flightFormatter = new FlightFormatter();
+    this.recommendationHelper = new RecommendationHelper();
 
     this.server = new Server({
       name: "flight-finder-mcp",
@@ -287,85 +301,68 @@ class FlightFinderMCPServer {
    * Handle flight search request
    */
   private async handleSearchFlights(args: any): Promise<any> {
-    const { source, ...searchParams } = args;
-    const request: FlightSearchRequest = searchParams;
+    try {
+      const { source, ...searchParams } = args;
+      const request: FlightSearchRequest = { ...searchParams, source };
 
-    let results: FlightSearchResponse;
+      const results = await this.flightSearchHelper.searchFlights(request);
 
-    switch (source) {
-      case "skyscanner":
-        results = await this.skyscannerService.searchFlights(request);
-        break;
-      case "google_flights":
-        results = await this.googleFlightsService.searchFlights(request);
-        break;
-      default:
-        throw new Error(`Unsupported source: ${source}`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: this.flightFormatter.formatFlightSearchResults(
+              results,
+              source,
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error("Error in handleSearchFlights:", error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error searching flights: ${error instanceof Error ? error.message : "Unknown error occurred"}`,
+          },
+        ],
+      };
     }
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: this.formatFlightSearchResults(results, source),
-        },
-      ],
-    };
   }
 
   /**
    * Handle multiple date search request
    */
   private async handleSearchMultipleDates(args: any): Promise<any> {
-    const {
-      origin,
-      destination,
-      dates,
-      passengers,
-      sources = ["skyscanner", "google_flights"],
-    } = args;
+    try {
+      const allResults =
+        await this.flightSearchHelper.searchMultipleDates(args);
+      const analysis =
+        this.analyzerService.analyzePricesAcrossDates(allResults);
 
-    const allResults: Array<{ date: string; results: FlightSearchResponse }> =
-      [];
-
-    for (const date of dates) {
-      for (const source of sources) {
-        try {
-          const request: FlightSearchRequest = {
-            origin,
-            destination,
-            departureDate: date,
-            passengers,
-          };
-
-          let results: FlightSearchResponse;
-          if (source === "skyscanner") {
-            results = await this.skyscannerService.searchFlights(request);
-          } else {
-            results = await this.googleFlightsService.searchFlights(request);
-          }
-
-          allResults.push({ date, results });
-        } catch (error) {
-          console.warn(`Failed to search ${source} for date ${date}:`, error);
-        }
-      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: this.flightFormatter.formatMultipleDateResults(
+              allResults,
+              analysis,
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      console.error("Error in handleSearchMultipleDates:", error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error searching multiple dates: ${error instanceof Error ? error.message : "Unknown error occurred"}`,
+          },
+        ],
+      };
     }
-
-    if (allResults.length === 0) {
-      throw new Error("No flights found for any of the specified dates");
-    }
-
-    const analysis = this.analyzerService.analyzePricesAcrossDates(allResults);
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: this.formatMultipleDateResults(allResults, analysis),
-        },
-      ],
-    };
   }
 
   /**
@@ -379,7 +376,7 @@ class FlightFinderMCPServer {
       content: [
         {
           type: "text",
-          text: this.formatFlightInsights(itinerary, insights),
+          text: this.flightFormatter.formatFlightInsights(itinerary, insights),
         },
       ],
     };
@@ -391,35 +388,14 @@ class FlightFinderMCPServer {
   private async handleGetBestPriceRecommendation(args: any): Promise<any> {
     const { origin, destination, dates, passengers } = args;
 
-    // Get best prices from both sources
-    const skyscannerBest = await this.skyscannerService.getBestPriceAcrossDates(
-      origin,
-      destination,
-      dates,
-      passengers,
-    );
-    const googleBest = await this.googleFlightsService.getBestPriceAcrossDates(
-      origin,
-      destination,
-      dates,
-      passengers,
-    );
-
-    // Determine overall best
-    const overallBest =
-      skyscannerBest.bestPrice < googleBest.bestPrice
-        ? skyscannerBest
-        : googleBest;
-    const bestSource =
-      skyscannerBest.bestPrice < googleBest.bestPrice
-        ? "Skyscanner"
-        : "Google Flights";
+    const { overallBest, bestSource, skyscannerBest, googleBest } =
+      await this.flightSearchHelper.getBestPriceRecommendation(args);
 
     return {
       content: [
         {
           type: "text",
-          text: this.formatBestPriceRecommendation(
+          text: this.flightFormatter.formatBestPriceRecommendation(
             origin,
             destination,
             overallBest,
@@ -440,56 +416,13 @@ class FlightFinderMCPServer {
       origin,
       destination,
       month,
-      passengers,
       cabinClass = "economy",
-      sources = ["skyscanner", "google_flights"],
       includeWeekendAnalysis = true,
     } = args;
 
     try {
-      // Generate all dates for the month
-      const dates = this.generateMonthDates(month);
-
-      // Search across all dates and sources
-      const allResults: Array<{
-        date: string;
-        source: string;
-        results: FlightSearchResponse;
-        cabinClass: string;
-      }> = [];
-
-      for (const date of dates) {
-        for (const source of sources) {
-          try {
-            const request: FlightSearchRequest = {
-              origin,
-              destination,
-              departureDate: date,
-              passengers,
-              cabinClass,
-            };
-
-            let results: FlightSearchResponse;
-            if (source === "skyscanner") {
-              results = await this.skyscannerService.searchFlights(request);
-            } else {
-              results = await this.googleFlightsService.searchFlights(request);
-            }
-
-            if (results.itineraries.length > 0) {
-              allResults.push({ date, source, results, cabinClass });
-            }
-          } catch (error) {
-            console.warn(`Failed to search ${source} for date ${date}:`, error);
-          }
-        }
-      }
-
-      if (allResults.length === 0) {
-        throw new Error(
-          `No flights found for ${month} from ${origin} to ${destination} in ${cabinClass} class`,
-        );
-      }
+      const allResults =
+        await this.flightSearchHelper.findBestMonthlyFlights(args);
 
       // Analyze the results
       const analysis = this.analyzerService.analyzeMonthlyFlightData(
@@ -498,16 +431,17 @@ class FlightFinderMCPServer {
       );
 
       // Get top recommendations
-      const topRecommendations = this.getTopFlightRecommendations(
-        allResults,
-        analysis,
-      );
+      const topRecommendations =
+        this.recommendationHelper.getTopFlightRecommendations(
+          allResults,
+          analysis,
+        );
 
       return {
         content: [
           {
             type: "text",
-            text: this.formatMonthlyFlightResults(
+            text: this.flightFormatter.formatMonthlyFlightResults(
               origin,
               destination,
               month,
@@ -527,105 +461,8 @@ class FlightFinderMCPServer {
   }
 
   /**
-   * Format flight search results for display
-   */
-  private formatFlightSearchResults(
-    results: FlightSearchResponse,
-    source: string,
-  ): string {
-    let output = `🔍 Flight Search Results from ${source}\n`;
-    output += `📍 ${results.searchMetadata.origin} → ${results.searchMetadata.destination}\n`;
-    output += `📅 Dates: ${results.searchMetadata.dates.join(", ")}\n`;
-    output += `⏰ Search Time: ${new Date(results.searchMetadata.searchTime).toLocaleString()}\n`;
-    output += `📊 Found ${results.searchMetadata.totalResults} options\n\n`;
-
-    results.itineraries.forEach((itinerary, index) => {
-      output += `**Option ${index + 1}**\n`;
-      output += `💰 Price: ${itinerary.price.formatted}\n`;
-      output += `⏱️  Duration: ${itinerary.totalDuration}\n`;
-      output += `🛫 Stops: ${itinerary.stops}\n`;
-
-      itinerary.segments.forEach((segment, segIndex) => {
-        output += `  ${segIndex + 1}. ${segment.airline} ${segment.flightNumber}\n`;
-        output += `     ${segment.origin} → ${segment.destination}\n`;
-        output += `     ${segment.departureTime} - ${segment.arrivalTime}\n`;
-        output += `     Duration: ${segment.duration}\n`;
-      });
-
-      output += `🔗 Book: ${itinerary.bookingLink}\n\n`;
-    });
-
-    return output;
-  }
-
-  /**
-   * Format multiple date search results
-   */
-  private formatMultipleDateResults(
-    allResults: Array<{ date: string; results: FlightSearchResponse }>,
-    analysis: PriceAnalysis,
-  ): string {
-    let output = `📊 Multi-Date Flight Analysis\n\n`;
-    output += `💰 Price Summary:\n`;
-    output += `  • Cheapest: ${analysis.cheapestDate} at $${analysis.cheapestPrice}\n`;
-    output += `  • Most Expensive: ${analysis.mostExpensiveDate} at $${analysis.mostExpensivePrice}\n`;
-    output += `  • Average: $${analysis.averagePrice}\n`;
-    output += `  • Price Range: $${analysis.priceRange}\n\n`;
-
-    output += `💡 Recommendations:\n`;
-    analysis.recommendations.forEach((rec) => {
-      output += `  • ${rec}\n`;
-    });
-
-    return output;
-  }
-
-  /**
-   * Format flight insights
-   */
-  private formatFlightInsights(itinerary: any, insights: string[]): string {
-    let output = `✈️ Flight Analysis\n\n`;
-    output += `💰 Price: ${itinerary.price.formatted}\n`;
-    output += `⏱️  Duration: ${itinerary.totalDuration}\n`;
-    output += `🛫 Stops: ${itinerary.stops}\n\n`;
-
-    output += `💡 Insights:\n`;
-    insights.forEach((insight) => {
-      output += `  • ${insight}\n`;
-    });
-
-    return output;
-  }
-
-  /**
    * Format best price recommendation
    */
-  private formatBestPriceRecommendation(
-    origin: string,
-    destination: string,
-    overallBest: any,
-    bestSource: string,
-    skyscannerBest: any,
-    googleBest: any,
-  ): string {
-    let output = `🏆 Best Price Recommendation\n\n`;
-    output += `📍 Route: ${origin} → ${destination}\n`;
-    output += `💰 Best Overall: ${bestSource} on ${overallBest.bestDate} at $${overallBest.bestPrice}\n\n`;
-
-    output += `📊 Price Comparison:\n`;
-    output += `  • Skyscanner: ${skyscannerBest.bestDate} at $${skyscannerBest.bestPrice}\n`;
-    output += `  • Google Flights: ${googleBest.bestDate} at $${googleBest.bestPrice}\n\n`;
-
-    output += `📅 All Prices by Date:\n`;
-    [...skyscannerBest.allPrices, ...googleBest.allPrices]
-      .sort((a, b) => a.price - b.price)
-      .slice(0, 10)
-      .forEach((price, index) => {
-        output += `  ${index + 1}. ${price.date}: $${price.price}\n`;
-      });
-
-    return output;
-  }
 
   /**
    * Generate all dates for a given month
@@ -758,6 +595,29 @@ class FlightFinderMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("Flight Finder MCP Server started");
+
+    // Handle graceful shutdown
+    process.on("SIGINT", async () => {
+      console.error("Shutting down Flight Finder MCP Server...");
+      await this.cleanup();
+      process.exit(0);
+    });
+
+    process.on("SIGTERM", async () => {
+      console.error("Shutting down Flight Finder MCP Server...");
+      await this.cleanup();
+      process.exit(0);
+    });
+  }
+
+  private async cleanup(): Promise<void> {
+    try {
+      await this.skyscannerService.close();
+      await this.googleFlightsService.close();
+      console.error("Cleanup completed");
+    } catch (error) {
+      console.error("Error during cleanup:", error);
+    }
   }
 }
 

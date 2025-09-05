@@ -2,6 +2,7 @@
  * Flight search request parameters
  */
 export interface FlightSearchRequest {
+  source: string;
   origin: string;
   destination: string;
   departureDate: string;
@@ -18,6 +19,7 @@ export interface FlightSearchRequest {
  * Flight segment information
  */
 export interface FlightSegment {
+  id: string;
   origin: string;
   destination: string;
   departureTime: string;
@@ -28,6 +30,7 @@ export interface FlightSegment {
   duration: string;
   stops: number;
   layoverDuration?: string;
+  cabinClass?: string;
 }
 
 /**
@@ -38,14 +41,13 @@ export interface FlightItinerary {
   price: {
     amount: number;
     currency: string;
-    formatted: string;
+    originalAmount?: number;
   };
   segments: FlightSegment[];
   totalDuration: string;
   stops: number;
   bookingLink: string;
   source: "skyscanner" | "google_flights";
-  searchDate: string;
 }
 
 /**
@@ -59,6 +61,7 @@ export interface FlightSearchResponse {
     origin: string;
     destination: string;
     dates: string[];
+    source: string;
   };
 }
 

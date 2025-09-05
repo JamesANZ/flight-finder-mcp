@@ -5,6 +5,8 @@ A powerful Model Context Protocol (MCP) server that allows AI assistants to sear
 ## ✨ Features
 
 - **Multi-Source Flight Search**: Search flights from Skyscanner and Google Flights
+- **Official API Integration**: Uses official APIs when available, falls back to scraping
+- **Advanced Web Scraping**: Multiple extraction strategies to find real flight data
 - **Smart Date Analysis**: Search across multiple dates to find the best prices
 - **Intelligent Insights**: AI-powered analysis of flight details and pricing patterns
 - **Booking Links**: Direct links to book flights on the respective platforms
@@ -42,10 +44,64 @@ The AI assistant provides significant value by:
    npm install
    ```
 
-3. **Build the project**:
+3. **Configure API keys (optional but recommended)**:
+
+   ```bash
+   cp config.example.env .env
+   # Edit .env and add your API keys
+   ```
+
+4. **Build the project**:
    ```bash
    npm run build
    ```
+
+## 🔑 API Configuration
+
+For the best experience, we recommend setting up API keys for official access:
+
+### Skyscanner API
+
+1. Apply for Skyscanner Partner API at: https://www.partners.skyscanner.net/product/travel-api
+2. Add your API key to the environment variables:
+
+```bash
+SKYSCANNER_API_KEY=your_api_key_here
+```
+
+### Google Flights Alternative (SearchAPI)
+
+1. Sign up for SearchAPI at: https://www.searchapi.io/
+2. Add your API key to the environment variables:
+
+```bash
+SEARCHAPI_KEY=your_api_key_here
+```
+
+**Note**: Without API keys, the server will fall back to web scraping, which may be slower and less reliable.
+
+## 🔍 Web Scraping Capabilities
+
+The server includes advanced web scraping capabilities with multiple extraction strategies:
+
+### **Multi-Strategy Approach**
+
+1. **Primary Selectors**: Looks for standard flight card elements
+2. **Price Pattern Matching**: Searches for price patterns in page content
+3. **Advanced DOM Traversal**: Scans for flight-related elements
+4. **Page Source Analysis**: Extracts data from HTML source and JSON
+5. **Fallback Mock Data**: Provides realistic mock data when scraping fails
+
+### **Anti-Detection Features**
+
+- **User Agent Rotation**: Uses realistic browser user agents
+- **Rate Limiting**: Implements delays between requests
+- **Dynamic Content Handling**: Waits for JavaScript-rendered content
+- **Loading Indicator Detection**: Waits for page loading to complete
+
+### **Real Data Extraction**
+
+The scraping system is designed to extract actual flight prices and information from websites, not just mock data. It uses multiple fallback strategies to ensure the best chance of finding real flight information.
 
 ## 🧪 Testing
 
